@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Windows OS Simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    :root {
+      --taskbar-height: 52px;
+      --topbar-height: 64px;
+      --window-radius: 14px;
+      --blur: 22px;
+      --glass-bg: rgba(255,255,255,0.16);
+      --glass-border: rgba(255,255,255,0.45);
+      --window-shadow: 0 12px 48px rgba(0,0,0,0.22);
+      --accent: #2563eb;
+      --success: #10b981;
+      --explorer: #2563eb;
+      --edge: #10b981;
+      --settings: #f59e0b;
+      --copilot: #111827;
+      --text: #1f2937;
+      --muted: #6b7280;
+    }
+
+    html,body {
+      height:100%;
+      margin:0;
+      font-family:'Segoe UI','Inter','Arial',sans-serif;
+      background: linear-gradient(135deg, #0ea5e9 0%, #9333ea 100%);
+      overflow:hidden;
+      color:var(--text);
+      user-select:none;
+    }
+
+    #desktop-bg {
+      position:absolute; inset:0;
+      background-size:cover; background-position:center;
+      z-index:0;
+      transition:background-image .35s ease;
+    }
+
+    /* Topbar */
+    .topbar {
+      position:fixed; left:0; right:0; top:0;
+      height:var(--topbar-height);
+      display:flex; align-items:center; gap:12px;
+      padding:10px 16px;
+      background: linear-gradient(120deg, rgba(255,255,255,0.28), rgba(255,255,255,0.06)), var(--glass-bg);
+      border-bottom:1px solid var(--glass-border);
+      backdrop-filter: blur(var(--blur));
+      z-index:1200;
+    }
+    .widgets-btn {
+      width:40px; height:40px; border-radius:10px;
+      display:flex; align-items:center; justify-content:center;
+      background: rgba(255,255,255,0.18);
+      border:1px solid var(--glass-border);
+      cursor:pointer;
+    }
+    .topbar .widget {
+      display:flex; align-items:center; gap:8px;
+      background: rgba(255,255,255,0.18);
+      border:1px solid var(--glass-border);
+      height:40px; padding:0 12px; border-radius:10px;
+    }
+    .topbar .spacer { flex:1; }
+
+    /* Copilot search */
+    .copilot-search-wrap{
+      flex:1;
+      display:flex; align-items:center; gap:10px;
+    }
+    .copilot-search{
+      display:flex; align-items:center; gap:10px;
+      height:44px; padding:0 14px;
+      background: linear-gradient(120deg, rgba(255,255,255,0.30), rgba(255,255,255,0.10)), rgba(255,255,255,0.22);
+      border:1px solid var(--glass-border);
+      border-radius:14px;
+      backdrop-filter: blur(calc(var(--blur) * 1.1));
+      box-shadow: 0 10px 36px rgba(0,0,0,0.16);
+      flex:1;
+    }
+    .copilot-search i{ color:var(--success); font-size:1.1em; }
+    .copilot-input{ flex:1; border:none; outline:none; background:transparent; color:var(--text); }
+    .copilot-action{ background:var(--success); color:#fff; border:none; border-radius:10px; padding:0 14px; cursor:pointer; }
+
+    /* Widgets panel */
+    .widgets-panel {
+      position:fixed; top:var(--topbar-height); left:0;
+      width:280px; height:calc(100vh - var(--topbar-height) - var(--taskbar-height));
+      background: linear-gradient(120deg, rgba(255,255,255,0.28), rgba(255,255,255,0.06)), var(--glass-bg);
+      border-right:1px solid var(--glass-border);
+      backdrop-filter: blur(var(--blur));
+      box-shadow: 4px 0 18px rgba(0,0,0,0.14);
+      padding:16px; display:none; flex-direction:column; gap:12px;
+      z-index:1100;
+    }
+    .widgets-panel.active{ display:flex; }
+    .widgets-title{ font-weight:700; }
+    .weather-widget{ background:rgba(255,255,255,0.22); border:1px solid var(--glass-border); border-radius:12px; padding:12px; }
+    .weather-location{ font-weight:600; }
+    .weather-temp{ font-size:1.6em; font-weight:800; }
+    .weather-desc{ color:var(--muted); }
+
+    /* Taskbar */
+    .taskbar {
+      position:fixed; left:0; right:0; bottom:0;
+      height:var(--taskbar-height);
+      display:flex; align-items:center; gap:12px;
+      padding:0 16px;
+      background: linear-gradient(120deg, rgba(255,255,255,0.28), rgba(255,255,255,0.06)), var(--glass-bg);
+      border-top:1px solid var(--glass-border);
+      backdrop-filter: blur(var(--blur));
+      z-index:1000;
+    }
+    .start-btn { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.18); border:1px solid var(--glass-border); cursor:pointer; }
+    .taskbar-apps { display:flex; align-items:center; gap:8px; flex:1; }
+    .taskbar-app { min-width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:transparent; border:none; cursor:pointer; }
+    .taskbar-app.active { background: rgba(37,99,235,0.15); outline:2px solid var(--accent); }
+    .clock { margin-left:auto; background:rgba(255,255,255,0.18); border:1px solid var(--glass-border); border-radius:10px; padding:0 14px; }
+
+    /* Window base */
+    .window {
+      position:absolute;
+      min-width:420px; min-height:280px;
+      max-width:92vw; max-height:78vh;
+      background: linear-gradient(120deg, rgba(255,255,255,0.30), rgba(255,255,255,0.10)), var(--glass-bg);
+      border-radius:var(--window-radius);
+      border:1px solid var(--glass-border);
+      box-shadow: var(--window-shadow);
+      backdrop-filter: blur(var(--blur));
+      z-index:20;
+      display:flex; flex-direction:column; overflow:hidden;
+      resize: both;
+    }
+    .titlebar { height:42px; display:flex; align-items:center; gap:10px; padding:0 10px; background:rgba(255,255,255,0.18); border-bottom:1px solid var(--glass-border); cursor:grab; }
+    .window-controls { display:flex; gap:6px; }
+    .window-btn { width:30px; height:30px; border:none; background:transparent; cursor:pointer; }
+    .window-content { flex:1; display:flex; flex-direction:column; overflow:auto; }
+
+    /* Explorer Tabs */
+    .explorer-tabs { display:flex; align-items:center; background:rgba(255,255,255,0.09); border-bottom:1px solid var(--glass-border); padding:4px 8px; gap:6px; }
+    .explorer-tab { display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px 8px 0 0; background:rgba(255,255,255,0.18); cursor:pointer; }
+    .explorer-tab.active { background:#2563eb22; color:var(--accent); font-weight:600; border-bottom:2px solid var(--accent); }
+    .close-tab-btn { border:none; background:transparent; cursor:pointer; }
+    #new-tab-btn { width:28px; height:28px; border:1px solid var(--glass-border); background:rgba(255,255,255,0.18); cursor:pointer; }
+
+    /* Explorer UI (Windows 11 style) */
+    .explorer{ display:flex; height:100%; }
+    .explorer-sidebar{ width:220px; background:rgba(255,255,255,0.18); border-right:1px solid var(--glass-border); padding:12px 10px; display:flex; flex-direction:column; gap:6px; }
+    .explorer-section-title{ font-size:.82em; color:var(--muted); font-weight:700; margin:10px 6px 6px; }
+    .nav-item{ display:flex; align-items:center; gap:10px; height:36px; padding:0 10px; border-radius:8px; cursor:pointer; }
+    .nav-item:hover{ background:rgba(37,99,235,0.12); }
+    .nav-item.active{ background:rgba(37,99,235,0.18); color:var(--accent); font-weight:600; }
+    .explorer-main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+    .explorer-commandbar{ display:flex; align-items:center; gap:8px; padding:8px 10px; background:rgba(255,255,255,0.14); border-bottom:1px solid var(--glass-border); }
+    .cmd-btn{ height:32px; padding:0 12px; border:none; border-radius:8px; background:rgba(255,255,255,0.22); cursor:pointer; font-weight:600; color:var(--text); }
+    .cmd-btn i{ margin-right:8px; color:var(--accent); }
+    .explorer-breadcrumbs{ display:flex; align-items:center; gap:8px; padding:8px 12px; font-size:.95em; color:var(--muted); border-bottom:1px dashed rgba(255,255,255,0.35); }
+    .crumb i{ color:var(--accent); }
+    .explorer-content{ flex:1; padding:14px; overflow:auto; }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
+    .file-card{ background:rgba(255,255,255,0.20); border:1px solid var(--glass-border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:6px; cursor:pointer; box-shadow: 0 6px 16px rgba(0,0,0,0.10); }
+    .file-card:hover{ background:rgba(255,255,255,0.26); }
+
+    /* Edge Tabs and layout */
+    .edge-tabs{ display:flex; align-items:center; background:rgba(255,255,255,0.12); border-bottom:1px solid var(--glass-border); padding:4px 8px; gap:6px; }
+    .edge-tab{ display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:6px 6px 0 0; background:rgba(255,255,255,0.18); cursor:pointer; }
+    .edge-tab.active{ background:#2563eb22; color:var(--accent); font-weight:600; border-bottom:2px solid var(--accent); }
+    .edge-tab .close-tab{ border:none; background:transparent; cursor:pointer; }
+    #edge-new-tab{ width:28px; height:28px; border:1px solid var(--glass-border); background:rgba(255,255,255,0.18); cursor:pointer; }
+
+    .edge-toolbar{ padding:6px; background:rgba(255,255,255,0.12); border-bottom:1px solid var(--glass-border); display:flex; gap:8px; }
+    .edge-toolbar input{ flex:1; padding:8px 10px; border-radius:6px; border:1px solid #ccc; background:rgba(255,255,255,0.85); }
+    .edge-toolbar button{ padding:6px 12px; border:none; border-radius:6px; background:var(--accent); color:#fff; cursor:pointer; }
+
+    .edge-main{ display:flex; height:100%; min-height:0; }
+    .edge-iframe{ flex:1; border:none; height:100%; background:#fff; }
+    .edge-copilot-sidebar{ flex:0 0 300px; border-left:1px solid var(--glass-border); display:none; }
+    .edge-copilot-sidebar.active{ display:block; }
+    .edge-copilot-sidebar iframe{ width:100%; height:100%; border:none; }
+
+    /* Start menu (Metro enhanced) */
+    .start-menu{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom: calc(var(--taskbar-height) + 18px);
+      width:min(860px, 92vw); height:min(560px, 72vh);
+      background: linear-gradient(180deg, rgba(255,255,255,0.30), rgba(255,255,255,0.12)), var(--glass-bg);
+      border-radius:22px; border:1px solid var(--glass-border);
+      box-shadow: 0 20px 56px rgba(0,0,0,0.26);
+      backdrop-filter: blur(calc(var(--blur) * 1.2));
+      z-index:2000; display:none;
+      padding:18px; overflow:hidden;
+      animation: fadeIn .18s ease;
+    }
+    @keyframes fadeIn{ from{opacity:0; transform:translate(-50%, 24px)} to{opacity:1; transform:translate(-50%, 0)} }
+    .start-menu.active{ display:block; }
+    .start-top{ display:flex; align-items:center; gap:12px; padding:0 6px 12px; border-bottom:1px solid var(--glass-border); }
+    .start-title{ font-size:1.18em; font-weight:700; letter-spacing:.2px; }
+    .start-body{ display:grid; grid-template-columns: 3fr 2fr; gap:16px; height:calc(100% - 56px); padding-top:14px; }
+    .pinned-area{ background: rgba(255,255,255,0.18); border:1px solid var(--glass-border); border-radius:16px; padding:14px; overflow:auto; }
+    .tiles{ display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; }
+    .tile{ background: rgba(255,255,255,0.22); border:1px solid var(--glass-border); border-radius:14px; height:90px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer; box-shadow: 0 10px 26px rgba(0,0,0,0.12); }
+    .tile i{ font-size:1.5em; }
+    .tile-label{ font-size:.92em; font-weight:600; }
+    .apps-area{ background: rgba(255,255,255,0.18); border:1px solid var(--glass-border); border-radius:16px; padding:14px; display:flex; flex-direction:column; min-width:0; }
+    .apps-search{ display:flex; align-items:center; gap:8px; margin-bottom:10px; background: rgba(255,255,255,0.24); border:1px solid var(--glass-border); border-radius:10px; height:36px; padding:0 10px; }
+    .apps-input{ flex:1; border:none; outline:none; background:transparent; color:var(--text); }
+    .apps-list{ overflow:auto; border-top:1px dashed rgba(255,255,255,0.35); margin-top:10px; padding-top:10px; }
+    .app-item{ display:flex; align-items:center; gap:10px; height:38px; padding:0 8px; border-radius:10px; cursor:pointer; }
+    .app-item:hover{ background: rgba(37,99,235,0.12); }
+
+    /* Copilot window sizing */
+    #copilot-window .window-content{ flex:1; display:flex; }
+    #copilot-window .copilot-iframe{ flex:1; border:none; width:100%; height:100%; background:#fff; }
+
+    /* Responsive */
+    @media (max-width:960px){ .start-body{ grid-template-columns: 1fr; } }
+    @media (max-width:720px){
+      .window{ min-width:280px; min-height:180px; }
+      .tiles{ grid-template-columns: repeat(4, 1fr); }
+      .widgets-panel{ width:220px; }
+    }
+
+    .window:focus-visible, .start-menu:focus-visible, .tile:focus-visible, .taskbar-app:focus-visible{
+      outline:2px solid var(--accent);
+      outline-offset:2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="desktop-bg"></div>
+
+  <!-- Widgets panel -->
+  <div id="widgets-panel" class="widgets-panel" aria-label="Widgets panel">
+    <div class="widgets-title">Widgets</div>
+    <div class="weather-widget">
+      <div class="weather-location">Garland, TX</div>
+      <div class="weather-temp">72°F</div>
+      <div class="weather-desc">Clear</div>
+    </div>
+  </div>
+
+  <!-- Topbar -->
+  <div class="topbar" aria-label="Top bar">
+    <button class="widgets-btn" id="widgets-btn" title="Widgets"><i class="fa-solid fa-layer-group"></i></button>
+    <div class="widget"><i class="fa-regular fa-calendar"></i><span id="widget-date">--</span></div>
+    <div class="widget"><i class="fa-regular fa-clock"></i><span id="widget-time">--:--</span></div>
+    <div class="spacer"></div>
+    <div class="copilot-search-wrap" aria-label="Copilot search">
+      <div class="copilot-search">
+        <i class="fa-solid fa-robot"></i>
+        <input id="copilot-input" class="copilot-input" type="text" placeholder="Ask Copilot or search the web...">
+        <button id="copilot-go" class="copilot-action">Ask</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Explorer window -->
+  <div id="explorer-window" class="window" style="left:80px; top:120px; width:860px; height:540px; display:none;" tabindex="0" aria-label="File Explorer">
+    <div class="titlebar" data-app="explorer">
+      <span class="window-icon"><i class="fa-regular fa-folder"></i></span>
+      <span class="window-title">File Explorer</span>
+      <div class="window-controls">
+        <button class="window-btn minimize" title="Minimize" aria-label="Minimize"><i class="fa-solid fa-minus"></i></button>
+        <button class="window-btn maximize" title="Maximize" aria-label="Maximize"><i class="fa-regular fa-square"></i></button>
+        <button class="window-btn close" title="Close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="window-content">
+      <div class="explorer-tabs" id="explorer-tabs">
+        <button id="new-tab-btn" type="button" title="New Tab" aria-label="New Tab"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <div class="explorer">
+        <div class="explorer-sidebar">
+          <div class="explorer-section-title">Quick access</div>
+          <div class="nav-item active" data-tab="home"><i class="fa-solid fa-house"></i><span>Home</span></div>
+          <div class="nav-item" data-tab="desktop"><i class="fa-regular fa-display"></i><span>Desktop</span></div>
+          <div class="nav-item" data-tab="documents"><i class="fa-regular fa-file-lines"></i><span>Documents</span></div>
+          <div class="nav-item" data-tab="downloads"><i class="fa-solid fa-download"></i><span>Downloads</span></div>
+          <div class="nav-item" data-tab="pictures"><i class="fa-regular fa-image"></i><span>Pictures</span></div>
+          <div class="nav-item" data-tab="music"><i class="fa-solid fa-music"></i><span>Music</span></div>
+          <div class="nav-item" data-tab="videos"><i class="fa-regular fa-file-video"></i><span>Videos</span></div>
+
+          <div class="explorer-section-title">This PC</div>
+          <div class="nav-item" data-tab="pc"><i class="fa-regular fa-hard-drive"></i><span>Local Disk (C:)</span></div>
+          <div class="nav-item" data-tab="network"><i class="fa-solid fa-network-wired"></i><span>Network</span></div>
+        </div>
+
+        <div class="explorer-main">
+          <div class="explorer-commandbar">
+            <button class="cmd-btn" data-cmd="new"><i class="fa-solid fa-plus"></i>New</button>
+            <button class="cmd-btn" data-cmd="copy"><i class="fa-regular fa-copy"></i>Copy</button>
+            <button class="cmd-btn" data-cmd="paste"><i class="fa-regular fa-paste"></i>Paste</button>
+            <button class="cmd-btn" data-cmd="rename"><i class="fa-regular fa-pen-to-square"></i>Rename</button>
+            <button class="cmd-btn" data-cmd="delete"><i class="fa-regular fa-trash-can"></i>Delete</button>
+            <div style="flex:1"></div>
+            <button class="cmd-btn" data-cmd="view"><i class="fa-regular fa-square"></i>View</button>
+            <button class="cmd-btn" data-cmd="sort"><i class="fa-solid fa-arrow-down-a-z"></i>Sort</button>
+          </div>
+          <div class="explorer-breadcrumbs">
+            <div class="crumb"><i class="fa-solid fa-house"></i><span id="crumb-path">Home</span></div>
+          </div>
+          <div class="explorer-content">
+            <div id="explorer-grid" class="grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edge window -->
+  <div id="edge-window" class="window" style="left:160px; top:160px; width:960px; height:560px; display:none;" tabindex="0" aria-label="Edge Browser">
+    <div class="titlebar" data-app="edge">
+      <span class="window-icon"><i class="fa-brands fa-edge"></i></span>
+      <span class="window-title">Microsoft Edge</span>
+      <div class="window-controls">
+        <button class="window-btn minimize" title="Minimize" aria-label="Minimize"><i class="fa-solid fa-minus"></i></button>
+        <button class="window-btn maximize" title="Maximize" aria-label="Maximize"><i class="fa-regular fa-square"></i></button>
+        <button class="window-btn close" title="Close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="window-content">
+      <div class="edge-tabs" id="edge-tabs">
+        <button id="edge-new-tab" title="New Tab" aria-label="New Tab"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <div class="edge-toolbar">
+        <input type="url" id="edge-url" placeholder="Enter URL and press Enter">
+        <button id="edge-copilot-btn"><i class="fa-solid fa-robot"></i> Copilot</button>
+      </div>
+      <div class="edge-main">
+        <iframe class="edge-iframe" id="edge-iframe" src="https://en.wikipedia.org/wiki/Main_Page" title="Browser"></iframe>
+        <div class="edge-copilot-sidebar" id="edge-copilot-sidebar">
+          <iframe src="https://copilot.microsoft.com" title="Copilot Sidebar"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Copilot window -->
+  <div id="copilot-window" class="window" style="left:320px; top:180px; width:640px; height:420px; display:none;" tabindex="0" aria-label="Copilot">
+    <div class="titlebar" data-app="copilot">
+      <span class="window-icon"><i class="fa-solid fa-robot"></i></span>
+      <span class="window-title">Copilot</span>
+      <div class="window-controls">
+        <button class="window-btn minimize" title="Minimize" aria-label="Minimize"><i class="fa-solid fa-minus"></i></button>
+        <button class="window-btn maximize" title="Maximize" aria-label="Maximize"><i class="fa-regular fa-square"></i></button>
+        <button class="window-btn close" title="Close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="window-content">
+      <iframe class="copilot-iframe" src="https://copilot.microsoft.com" title="Copilot"></iframe>
+    </div>
+  </div>
+
+  <!-- Settings window -->
+  <div id="settings-window" class="window" style="left:260px; top:220px; width:520px; height:420px; display:none;" tabindex="0" aria-label="Settings">
+    <div class="titlebar" data-app="settings">
+      <span class="window-icon"><i class="fa-solid fa-gear"></i></span>
+      <span class="window-title">Settings</span>
+      <div class="window-controls">
+        <button class="window-btn minimize" title="Minimize" aria-label="Minimize"><i class="fa-solid fa-minus"></i></button>
+        <button class="window-btn maximize" title="Maximize" aria-label="Maximize"><i class="fa-regular fa-square"></i></button>
+        <button class="window-btn close" title="Close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="window-content" style="flex-direction:column;">
+      <form id="settings-form" style="padding:16px; display:flex; flex-direction:column; gap:14px;">
+        <div>
+          <label for="bg-url" style="font-weight:700;">Background image URL</label>
+          <input type="url" id="bg-url" placeholder="https://example.com/image.jpg"
+                 style="width:100%; height:36px; border-radius:10px; border:1px solid #d1d5db; background:rgba(255,255,255,0.7); padding:0 10px;">
+        </div>
+        <div>
+          <label for="bg-file" style="font-weight:700;">Upload local image</label>
+          <input type="file" id="bg-file" accept="image/*">
+        </div>
+        <div>
+          <label style="font-weight:700;">Preview</label>
+          <img id="bg-preview" alt="Preview" style="max-width:100%; max-height:160px; border-radius:12px; border:1px solid #d1d5db; display:none;">
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button type="submit" class="cmd-btn" style="background:var(--accent); color:#fff;">Apply</button>
+          <span id="settings-status" style="font-size:.98em; color:var(--success);"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Taskbar -->
+  <div class="taskbar" role="navigation" aria-label="Taskbar">
+    <button class="start-btn" id="start-btn" title="Start" aria-label="Open Start"><i class="fa-brands fa-windows"></i></button>
+    <div class="taskbar-apps">
+      <button class="taskbar-app" data-app="explorer" title="File Explorer" aria-label="File Explorer"><i class="fa-regular fa-folder"></i></button>
+      <button class="taskbar-app" data-app="edge" title="Edge" aria-label="Edge"><i class="fa-brands fa-edge"></i></button>
+      <button class="taskbar-app" data-app="copilot" title="Copilot" aria-label="Copilot"><i class="fa-solid fa-robot"></i></button>
+      <button class="taskbar-app" data-app="settings" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
+    </div>
+    <span class="clock" id="taskbar-clock" aria-label="Current time">--:--:--</span>
+  </div>
+
+  <!-- Start menu -->
+  <div class="start-menu" id="start-menu" tabindex="-1" aria-label="Start Menu">
+    <div class="start-top">
+      <div class="start-title">Start</div>
+      <div style="flex:1"></div>
+      <button class="cmd-btn" id="start-power"><i class="fa-solid fa-power-off"></i>Power</button>
+      <button class="cmd-btn" id="start-settings"><i class="fa-solid fa-gear"></i>Settings</button>
+    </div>
+    <div class="start-body">
+      <div class="pinned-area">
+        <div class="tiles">
+          <div class="tile" data-app="explorer" tabindex="0" aria-label="Explorer">
+            <i class="fa-regular fa-folder"></i><span class="tile-label">Explorer</span>
+          </div>
+          <div class="tile" data-app="edge" tabindex="0" aria-label="Edge">
+            <i class="fa-brands fa-edge"></i><span class="tile-label">Edge</span>
+          </div>
+          <div class="tile" data-app="copilot" tabindex="0" aria-label="Copilot">
+            <i class="fa-solid fa-robot"></i><span class="tile-label">Copilot</span>
+          </div>
+          <div class="tile" data-app="settings" tabindex="0" aria-label="Settings">
+            <i class="fa-solid fa-gear"></i><span class="tile-label">Settings</span>
+          </div>
+          <div class="tile" data-app="photos" tabindex="0" aria-label="Photos">
+            <i class="fa-regular fa-image"></i><span class="tile-label">Photos</span>
+          </div>
+          <div class="tile" data-app="music" tabindex="0" aria-label="Music">
+            <i class="fa-solid fa-music"></i><span class="tile-label">Music</span>
+          </div>
+          <div class="tile" data-app="store" tabindex="0" aria-label="Store">
+            <i class="fa-solid fa-bag-shopping"></i><span class="tile-label">Store</span>
+          </div>
+          <div class="tile" data-app="mail" tabindex="0" aria-label="Mail">
+            <i class="fa-regular fa-envelope"></i><span class="tile-label">Mail</span>
+          </div>
+          <div class="tile" data-app="calendar" tabindex="0" aria-label="Calendar">
+            <i class="fa-regular fa-calendar"></i><span class="tile-label">Calendar</span>
+          </div>
+          <div class="tile" data-app="terminal" tabindex="0" aria-label="Terminal">
+            <i class="fa-solid fa-terminal"></i><span class="tile-label">Terminal</span>
+          </div>
+          <div class="tile" data-app="notepad" tabindex="0" aria-label="Notepad">
+            <i class="fa-regular fa-note-sticky"></i><span class="tile-label">Notepad</span>
+          </div>
+          <div class="tile" data-app="maps" tabindex="0" aria-label="Maps">
+            <i class="fa-regular fa-map"></i><span class="tile-label">Maps</span>
+          </div>
+          <div class="tile" data-app="camera" tabindex="0" aria-label="Camera">
+            <i class="fa-solid fa-camera"></i><span class="tile-label">Camera</span>
+          </div>
+        </div>
+      </div>
+      <div class="apps-area">
+        <div class="apps-search">
+          <i class="fa-solid fa-magnifying-glass" style="color:var(--accent)"></i>
+          <input id="apps-filter" class="apps-input" type="text" placeholder="Search apps">
+        </div>
+        <div id="apps-list" class="apps-list" role="listbox" aria-label="All apps"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Z-index + focus
+    let zCounter = 100;
+    function bringToFront(win){
+      zCounter++;
+      win.style.zIndex = zCounter;
+      document.querySelectorAll('.window').forEach(w => w.classList.remove('focused'));
+      win.classList.add('focused');
+    }
+
+    // Windows registry
+    const windows = {
+      explorer: document.getElementById('explorer-window'),
+      edge: document.getElementById('edge-window'),
+      copilot: document.getElementById('copilot-window'),
+      settings: document.getElementById('settings-window')
+    };
+
+    function openWindow(app){
+      const win = windows[app];
+      if(!win) return;
+      win.style.display = 'flex';
+      win.classList.remove('minimized');
+      bringToFront(win);
+      document.querySelector(`.taskbar-app[data-app="${app}"]`)?.classList.add('active');
+    }
+    function minimizeWindow(win){
+      win.classList.add('minimized');
+      const app = win.querySelector('.titlebar').dataset.app;
+      document.querySelector(`.taskbar-app[data-app="${app}"]`)?.classList.remove('active');
+    }
+    function maximizeWindow(win){
+      if(win.classList.contains('maximized')){
+        const prev = win._prevRect;
+        if(prev){
+          win.style.left = prev.left; win.style.top = prev.top; win.style.width = prev.width; win.style.height = prev.height;
+        }
+        win.classList.remove('maximized');
+      }else{
+        win._prevRect = { left: win.style.left, top: win.style.top, width: win.style.width, height: win.style.height };
+        win.style.left = '0px';
+        win.style.top = getComputedStyle(document.documentElement).getPropertyValue('--topbar-height');
+        win.style.width = '100vw';
+        win.style.height = `calc(100vh - ${getComputedStyle(document.documentElement).getPropertyValue('--taskbar-height')} - ${getComputedStyle(document.documentElement).getPropertyValue('--topbar-height')})`;
+        win.classList.add('maximized');
+      }
+      bringToFront(win);
+    }
+    function closeWindow(win){
+      win.style.display = 'none';
+      win.classList.remove('minimized','maximized');
+      const app = win.querySelector('.titlebar').dataset.app;
+      document.querySelector(`.taskbar-app[data-app="${app}"]`)?.classList.remove('active');
+    }
+
+    // Taskbar + Start menu
+    const startBtn = document.getElementById('start-btn');
+    const startMenu = document.getElementById('start-menu');
+    let startMenuOpen = false;
+    function toggleStart(){
+      startMenuOpen = !startMenuOpen;
+      startMenu.classList.toggle('active', startMenuOpen);
+      startBtn.classList.toggle('active', startMenuOpen);
+      if(startMenuOpen) startMenu.focus();
+    }
+    startBtn.addEventListener('click', e => { e.stopPropagation(); toggleStart(); });
+    document.addEventListener('mousedown', e => {
+      if(startMenuOpen && !startMenu.contains(e.target) && e.target !== startBtn){
+        startMenuOpen = false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+      }
+    });
+
+    document.querySelectorAll('.taskbar-app').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const app = btn.dataset.app;
+        const win = windows[app];
+        if(win.style.display==='none' || win.classList.contains('minimized')) openWindow(app);
+        else minimizeWindow(win);
+      });
+    });
+
+    // Window controls + drag
+    document.querySelectorAll('.window').forEach(win=>{
+      win.querySelector('.window-btn.minimize')?.addEventListener('click', e=>{ e.stopPropagation(); minimizeWindow(win); });
+      win.querySelector('.window-btn.maximize')?.addEventListener('click', e=>{ e.stopPropagation(); maximizeWindow(win); });
+      win.querySelector('.window-btn.close')?.addEventListener('click', e=>{ e.stopPropagation(); closeWindow(win); });
+      win.addEventListener('mousedown', ()=>bringToFront(win));
+      win.addEventListener('focus', ()=>bringToFront(win));
+
+      const titlebar = win.querySelector('.titlebar');
+      let isDragging=false, offsetX=0, offsetY=0;
+      titlebar?.addEventListener('mousedown', e=>{
+        if(win.classList.contains('maximized')) return;
+        isDragging = true; bringToFront(win);
+        offsetX = e.clientX - win.offsetLeft; offsetY = e.clientY - win.offsetTop;
+        document.body.style.userSelect = 'none';
+      });
+      document.addEventListener('mousemove', e=>{
+        if(!isDragging) return;
+        let x = e.clientX - offsetX;
+        let y = e.clientY - offsetY;
+        x = Math.max(0, Math.min(window.innerWidth - win.offsetWidth, x));
+        y = Math.max(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--topbar-height')), Math.min(window.innerHeight - win.offsetHeight - parseInt(getComputedStyle(document.documentElement).getPropertyValue('--taskbar-height')), y));
+        win.style.left = x+'px'; win.style.top = y+'px';
+      });
+      document.addEventListener('mouseup', ()=>{ isDragging=false; document.body.style.userSelect=''; });
+    });
+
+    // Top widgets time/date
+    function updateTop(){
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2,'0');
+      const m = String(now.getMinutes()).padStart(2,'0');
+      const s = String(now.getSeconds()).padStart(2,'0');
+      document.getElementById('widget-time').textContent = `${h}:${m}`;
+      document.getElementById('taskbar-clock').textContent = `${h}:${m}:${s}`;
+      const dd = now.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+      document.getElementById('widget-date').textContent = dd;
+    }
+    setInterval(updateTop, 1000); updateTop();
+
+    // Widgets toggle
+    const widgetsBtn = document.getElementById('widgets-btn');
+    const widgetsPanel = document.getElementById('widgets-panel');
+    widgetsBtn?.addEventListener('click', ()=> widgetsPanel.classList.toggle('active'));
+
+    // Copilot search -> Copilot window
+    const copilotInput = document.getElementById('copilot-input');
+    const copilotGo = document.getElementById('copilot-go');
+    function copilotSearch(){
+      const q = copilotInput.value.trim();
+      if(!q) return;
+      openWindow('copilot');
+      const copilotIframe = document.querySelector('#copilot-window .copilot-iframe');
+      copilotIframe.src = `https://copilot.microsoft.com/?q=${encodeURIComponent(q)}`;
+    }
+    copilotGo.addEventListener('click', copilotSearch);
+    copilotInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ copilotSearch(); } });
+
+    // Start tiles open windows
+    startMenu.querySelectorAll('.tile').forEach(tile=>{
+      tile.addEventListener('click', ()=>{
+        const app = tile.dataset.app;
+        if(windows[app]) openWindow(app);
+        startMenuOpen = false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+      });
+      tile.addEventListener('keydown', e=>{
+        if(e.key==='Enter' || e.key===' '){
+          const app = tile.dataset.app;
+          if(windows[app]) openWindow(app);
+          startMenuOpen = false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+        }
+      });
+    });
+
+    // Apps list
+    const allApps = [
+      { id:'explorer', name:'Explorer', icon:'fa-regular fa-folder' },
+      { id:'edge', name:'Microsoft Edge', icon:'fa-brands fa-edge' },
+      { id:'copilot', name:'Copilot', icon:'fa-solid fa-robot' },
+      { id:'settings', name:'Settings', icon:'fa-solid fa-gear' },
+      { id:'photos', name:'Photos', icon:'fa-regular fa-image' },
+      { id:'music', name:'Music', icon:'fa-solid fa-music' },
+      { id:'store', name:'Store', icon:'fa-solid fa-bag-shopping' },
+      { id:'mail', name:'Mail', icon:'fa-regular fa-envelope' },
+      { id:'calendar', name:'Calendar', icon:'fa-regular fa-calendar' },
+      { id:'terminal', name:'Terminal', icon:'fa-solid fa-terminal' },
+      { id:'notepad', name:'Notepad', icon:'fa-regular fa-note-sticky' },
+      { id:'maps', name:'Maps', icon:'fa-regular fa-map' },
+      { id:'camera', name:'Camera', icon:'fa-solid fa-camera' }
+    ];
+    const appsList = document.getElementById('apps-list');
+    const appsFilter = document.getElementById('apps-filter');
+    function renderApps(filter=''){
+      appsList.innerHTML = '';
+      const q = filter.toLowerCase();
+      allApps.filter(a => a.name.toLowerCase().includes(q)).forEach(a=>{
+        const li = document.createElement('div');
+        li.className = 'app-item'; li.setAttribute('role','option'); li.tabIndex = 0;
+        li.innerHTML = `<i class="${a.icon}"></i><span>${a.name}</span>`;
+        li.addEventListener('click', ()=>{
+          if(windows[a.id]) openWindow(a.id);
+          startMenuOpen=false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+        });
+        li.addEventListener('keydown', e=>{
+          if(e.key==='Enter' || e.key===' '){
+            if(windows[a.id]) openWindow(a.id);
+            startMenuOpen=false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+          }
+        });
+        appsList.appendChild(li);
+      });
+      if(!appsList.children.length){
+        const empty = document.createElement('div');
+        empty.style.color = '#6b7280'; empty.style.padding = '8px 6px';
+        empty.textContent = 'No apps found';
+        appsList.appendChild(empty);
+      }
+    }
+    appsFilter.addEventListener('input', ()=>renderApps(appsFilter.value));
+    renderApps('');
+
+    // Explorer data
+    const explorerData = {
+      home: [
+        { name:'Desktop', type:'folder', meta:'Folder' },
+        { name:'Documents', type:'folder', meta:'Folder' },
+        { name:'Pictures', type:'folder', meta:'Folder' },
+        { name:'Music', type:'folder', meta:'Folder' },
+        { name:'Videos', type:'folder', meta:'Folder' },
+        { name:'Downloads', type:'folder', meta:'Folder' }
+      ],
+      desktop: [
+        { name:'Shortcut to Edge', type:'link', meta:'Shortcut' },
+        { name:'Wallpaper1.jpg', type:'image', meta:'1.8 MB' }
+      ],
+      documents: [
+        { name:'Resume.docx', type:'doc', meta:'48 KB' },
+        { name:'ProjectPlan.pdf', type:'pdf', meta:'1.2 MB' },
+        { name:'Notes.txt', type:'txt', meta:'3 KB' }
+      ],
+      downloads: [
+        { name:'Setup.exe', type:'exe', meta:'35.2 MB' },
+        { name:'Invoice.pdf', type:'pdf', meta:'220 KB' },
+        { name:'Image.png', type:'image', meta:'640 KB' }
+      ],
+      pictures: [
+        { name:'Vacation.jpg', type:'image', meta:'2.1 MB' },
+        { name:'Family.png', type:'image', meta:'1.0 MB' },
+        { name:'Wallpaper1.jpg', type:'image', meta:'1.5 MB' }
+      ],
+      music: [
+        { name:'Song1.mp3', type:'audio', meta:'5.3 MB' },
+        { name:'Album2.flac', type:'audio', meta:'24.7 MB' },
+        { name:'Playlist.m3u', type:'list', meta:'12 tracks' }
+      ],
+      videos: [
+        { name:'Clip1.mp4', type:'video', meta:'42.3 MB' },
+        { name:'Clip2.mov', type:'video', meta:'66.8 MB' }
+      ],
+      pc: [
+        { name:'Windows', type:'folder', meta:'System' },
+        { name:'Program Files', type:'folder', meta:'Apps' },
+        { name:'Users', type:'folder', meta:'Profiles' }
+      ],
+      network: [
+        { name:'Shared-Docs', type:'folder', meta:'Network share' }
+      ]
+    };
+    const iconByType = {
+      folder:'fa-regular fa-folder',
+      doc:'fa-regular fa-file-word',
+      pdf:'fa-regular fa-file-pdf',
+      txt:'fa-regular fa-file-lines',
+      exe:'fa-solid fa-cube',
+      image:'fa-regular fa-image',
+      audio:'fa-solid fa-music',
+      video:'fa-regular fa-file-video',
+      list:'fa-regular fa-square-check',
+      link:'fa-solid fa-link'
+    };
+
+    const explorerGrid = document.getElementById('explorer-grid');
+    const crumbPath = document.getElementById('crumb-path');
+
+    function renderExplorer(tab){
+      const sidebarItems = document.querySelectorAll('.explorer-sidebar .nav-item');
+      sidebarItems.forEach(n => n.classList.toggle('active', n.dataset.tab===tab));
+      crumbPath.textContent = tab[0].toUpperCase() + tab.slice(1);
+      explorerGrid.innerHTML = '';
+      (explorerData[tab] || []).forEach(item=>{
+        const card = document.createElement('div');
+        card.className = 'file-card';
+        card.innerHTML = `
+          <div class="file-icon"><i class="${iconByType[item.type]||'fa-regular fa-file'}"></i></div>
+          <div class="file-name">${item.name}</div>
+          <div class="file-meta">${item.meta}</div>
+        `;
+        explorerGrid.appendChild(card);
+      });
+    }
+    document.querySelectorAll('.explorer-sidebar .nav-item').forEach(nav=>{
+      nav.addEventListener('click', ()=>{
+        renderExplorer(nav.dataset.tab);
+        const activeTabEl = document.getElementById('explorer-tabs').querySelector('.explorer-tab.active');
+        if (activeTabEl) {
+          const tid = activeTabEl.dataset.tab;
+          explorerTabsData[tid].currentSection = nav.dataset.tab;
+        }
+      });
+      nav.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' ') nav.click(); });
+    });
+
+    // Command bar ping
+    document.querySelectorAll('.explorer-commandbar .cmd-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        btn.style.transform = 'scale(0.98)';
+        setTimeout(()=>btn.style.transform='', 100);
+      });
+    });
+
+    // Explorer Tabs Manager
+    const explorerTabsContainer = document.getElementById('explorer-tabs');
+    const newExplorerTabBtn = document.getElementById('new-tab-btn');
+    let explorerTabCounter = 0;
+    const explorerTabsData = {}; // tabId -> { name, currentSection }
+
+    function setExplorerTab(tabId) {
+      explorerTabsContainer?.querySelectorAll('.explorer-tab').forEach(t => {
+        const active = t.dataset.tab === tabId;
+        t.classList.toggle('active', active);
+        t.setAttribute('aria-selected', active);
+      });
+      const data = explorerTabsData[tabId];
+      renderExplorer(data?.currentSection || 'home');
+    }
+
+    function createExplorerTab(name = "Home", initialSection = "home") {
+      explorerTabCounter++;
+      const tabId = "tab-" + explorerTabCounter;
+      explorerTabsData[tabId] = { name, currentSection: initialSection };
+
+      const tabBtn = document.createElement('div');
+      tabBtn.className = "explorer-tab";
+      tabBtn.dataset.tab = tabId;
+
+      const label = document.createElement('span');
+      label.textContent = name;
+      label.className = "tab-label";
+
+      label.addEventListener('dblclick', () => {
+        const input = document.createElement('input');
+        input.type = "text"; input.value = label.textContent; input.className = "rename-input";
+        tabBtn.replaceChild(input, label); input.focus();
+        function commitRename() {
+          const newName = input.value.trim() || "Untitled";
+          label.textContent = newName;
+          explorerTabsData[tabId].name = newName;
+          tabBtn.replaceChild(label, input);
+        }
+        input.addEventListener('keydown', (e) => { if (e.key === "Enter") commitRename(); });
+        input.addEventListener('blur', commitRename);
+      });
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = "button";
+      closeBtn.className = "close-tab-btn";
+      closeBtn.innerHTML = "&times;";
+      closeBtn.title = "Close";
+
+      tabBtn.appendChild(label);
+      tabBtn.appendChild(closeBtn);
+      explorerTabsContainer?.insertBefore(tabBtn, newExplorerTabBtn);
+
+      tabBtn.addEventListener('click', () => setExplorerTab(tabId));
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasActive = tabBtn.classList.contains('active');
+        delete explorerTabsData[tabId];
+        tabBtn.remove();
+        if (wasActive) {
+          const remaining = explorerTabsContainer.querySelectorAll('.explorer-tab');
+          if (remaining.length > 0) setExplorerTab(remaining[0].dataset.tab);
+          else { renderExplorer('home'); }
+        }
+      });
+
+      setExplorerTab(tabId);
+    }
+
+    newExplorerTabBtn?.addEventListener('click', () => createExplorerTab("Home", "home"));
+
+    // Edge Tab Manager
+    const edgeTabsContainer = document.getElementById('edge-tabs');
+    const edgeIframe = document.getElementById('edge-iframe');
+    const edgeUrlInput = document.getElementById('edge-url');
+    const edgeNewTabBtn = document.getElementById('edge-new-tab');
+    let edgeTabCounter = 0;
+    const edgeTabsData = {}; // tabId -> { url, labelOverride }
+
+    function domainFromUrl(url){
+      try { return new URL(url).hostname; }
+      catch { return url.replace(/^https?:\/\//,'').split('/')[0]; }
+    }
+
+    function setEdgeTab(tabId){
+      edgeTabsContainer.querySelectorAll('.edge-tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tabId));
+      const data = edgeTabsData[tabId];
+      if(data){
+        edgeIframe.src = data.url;
+        edgeUrlInput.value = data.url;
+        const labelEl = edgeTabsContainer.querySelector(`.edge-tab[data-tab="${tabId}"] .tab-label`);
+        if(labelEl && !data.labelOverride){ labelEl.textContent = domainFromUrl(data.url); }
+      }
+    }
+
+    function createEdgeTab(url="https://www.bing.com"){
+      edgeTabCounter++;
+      const tabId = "edge-tab-" + edgeTabCounter;
+      edgeTabsData[tabId] = { url, labelOverride:null };
+
+      const tabBtn = document.createElement('div');
+      tabBtn.className = "edge-tab";
+      tabBtn.dataset.tab = tabId;
+
+      const label = document.createElement('span');
+      label.className = "tab-label";
+      label.textContent = domainFromUrl(url);
+
+      label.addEventListener('dblclick', ()=>{
+        const input = document.createElement('input');
+        input.type="text"; input.value=label.textContent; input.className="rename-input";
+        tabBtn.replaceChild(input, label); input.focus();
+        function commit(){
+          const newName = input.value.trim() || "Untitled";
+          label.textContent = newName;
+          edgeTabsData[tabId].labelOverride = newName;
+          tabBtn.replaceChild(label, input);
+        }
+        input.addEventListener('keydown', e=>{ if(e.key==='Enter') commit(); });
+        input.addEventListener('blur', commit);
+      });
+
+      const close = document.createElement('button');
+      close.className = "close-tab"; close.innerHTML = "&times;"; close.title="Close";
+
+      tabBtn.appendChild(label);
+      tabBtn.appendChild(close);
+      edgeTabsContainer.insertBefore(tabBtn, edgeNewTabBtn);
+
+      tabBtn.addEventListener('click', ()=>setEdgeTab(tabId));
+      close.addEventListener('click', e=>{
+        e.stopPropagation();
+        const wasActive = tabBtn.classList.contains('active');
+        delete edgeTabsData[tabId];
+        tabBtn.remove();
+        if(wasActive){
+          const remaining = edgeTabsContainer.querySelectorAll('.edge-tab');
+          if(remaining.length>0) setEdgeTab(remaining[0].dataset.tab);
+          else { edgeIframe.src="about:blank"; edgeUrlInput.value=""; }
+        }
+      });
+
+      setEdgeTab(tabId);
+    }
+
+    edgeNewTabBtn.addEventListener('click', ()=>createEdgeTab("https://www.bing.com"));
+
+    edgeUrlInput.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){
+        let url = edgeUrlInput.value.trim();
+        if(!url) return;
+        if(!/^https?:\/\//i.test(url)) url = "https://" + url;
+        const active = edgeTabsContainer.querySelector('.edge-tab.active');
+        if(active){
+          const tabId = active.dataset.tab;
+          edgeTabsData[tabId].url = url;
+          setEdgeTab(tabId);
+        }
+      }
+    });
+
+    // Copilot sidebar toggle in Edge
+    const edgeCopilotBtn = document.getElementById('edge-copilot-btn');
+    const edgeCopilotSidebar = document.getElementById('edge-copilot-sidebar');
+    edgeCopilotBtn.addEventListener('click', ()=>{
+      edgeCopilotSidebar.classList.toggle('active');
+    });
+
+    // Initialize Edge with two tabs
+    createEdgeTab("https://en.wikipedia.org/wiki/Main_Page");
+    createEdgeTab("https://www.bing.com");
+
+    // Initialize Explorer
+    createExplorerTab("Home", "home");
+    renderExplorer('home');
+    openWindow('explorer');
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e=>{
+      if((e.key==='Meta' || e.key==='OS') && !e.repeat){ toggleStart(); e.preventDefault(); }
+      if(e.key==='Escape' && startMenuOpen){
+        startMenuOpen=false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+      }
+    });
+
+    // Start menu focus trap
+    startMenu.addEventListener('keydown', e=>{
+      if(e.key==='Tab'){
+        const focusable = startMenu.querySelectorAll('.tile, .app-item, #apps-filter, #start-power, #start-settings');
+        const first = focusable[0], last = focusable[focusable.length-1];
+        if(e.shiftKey && document.activeElement===first){ last.focus(); e.preventDefault(); }
+        else if(!e.shiftKey && document.activeElement===last){ first.focus(); e.preventDefault(); }
+      }
+    });
+
+    // Prevent native drag selection
+    document.body.addEventListener('dragstart', e=>e.preventDefault());
+
+    // Settings: background image
+    const bgUrlInput = document.getElementById('bg-url');
+    const bgFileInput = document.getElementById('bg-file');
+    const bgPreview = document.getElementById('bg-preview');
+    const bgForm = document.getElementById('settings-form');
+    const bgStatus = document.getElementById('settings-status');
+    const desktopBg = document.getElementById('desktop-bg');
+
+    bgFileInput.addEventListener('change', (e)=>{
+      const file = e.target.files[0];
+      if(file && file.type.startsWith('image/')){
+        const reader = new FileReader();
+        reader.onload = ev => { bgPreview.src = ev.target.result; bgPreview.style.display='block'; };
+        reader.readAsDataURL(file);
+      }else{ bgPreview.style.display='none'; }
+    });
+    bgUrlInput.addEventListener('input', ()=>{
+      const url = bgUrlInput.value.trim();
+      if(url){ bgPreview.src = url; bgPreview.style.display='block'; } else { bgPreview.style.display='none'; }
+    });
+    bgForm.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      bgStatus.textContent = '';
+      const url = bgUrlInput.value.trim();
+      const file = bgFileInput.files[0];
+      if(file && file.type.startsWith('image/')){
+        const reader = new FileReader();
+        reader.onload = ev => { desktopBg.style.backgroundImage = `url('${ev.target.result}')`; bgStatus.textContent = 'Background updated'; };
+        reader.readAsDataURL(file);
+      }else if(url){
+        try{
+          const res = await fetch(url, { mode:'cors' });
+          if(!res.ok) throw new Error('Image not found');
+          const blob = await res.blob();
+          const objectURL = URL.createObjectURL(blob);
+          desktopBg.style.backgroundImage = `url('${objectURL}')`;
+          bgStatus.textContent = 'Background updated';
+        }catch(err){
+          desktopBg.style.backgroundImage=''; bgStatus.textContent='Failed to load image';
+        }
+      }else{
+        bgStatus.textContent='Provide an image URL or upload a file';
+      }
+    });
+
+    // Start quick actions
+    document.getElementById('start-settings').addEventListener('click', ()=>{
+      openWindow('settings'); startMenuOpen=false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+    });
+    document.getElementById('start-power').addEventListener('click', ()=>{
+      startMenuOpen=false; startMenu.classList.remove('active'); startBtn.classList.remove('active');
+    });
+  </script>
+</body>
+</html>
